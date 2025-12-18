@@ -66,6 +66,80 @@ def test_database_connection():
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
+def insert_valid_users_to_db(valid_users):
+    """Insert valid users into the wp_users table"""
+    if not valid_users:
+        return 0, []
+
+    connection = get_database_connection()
+    if not connection:
+        return 0, ["Error: No se pudo conectar a la base de datos"]
+
+    inserted_count = 0
+    errors = []
+
+    try:
+        with connection.cursor() as cursor:
+            for user in valid_users:
+                try:
+                    dni = user.get('dni', '').strip()
+                    email = user.get('email', '').strip()
+
+                    # Generate a default password (in production, this should be handled differently)
+                    # For now, using a placeholder password that should be changed
+                    default_password = '$P$B' + 'defaultpassword'  # This is not secure, just for testing
+
+                    # Use DNI as user_login (unique)
+                    user_login = dni
+
+                    # Generate display_name (could be improved with more data)
+                    display_name = dni  # Or use name if available
+
+                    # Check if user already exists by email or login
+                    cursor.execute("SELECT ID FROM wp_users WHERE user_login = %s OR user_email = %s", (user_login, email))
+                    existing_user = cursor.fetchone()
+
+                    if existing_user:
+                        # Update existing user
+                        sql = """
+                            UPDATE wp_users
+                            SET user_email = %s, display_name = %s, user_status = 0
+                            WHERE ID = %s
+                        """
+                        cursor.execute(sql, (email, display_name, existing_user['ID']))
+                        logging.info(f"Updated existing user {user_login}")
+                    else:
+                        # Insert new user
+                        sql = """
+                            INSERT INTO wp_users (
+                                user_login, user_pass, user_nicename, user_email,
+                                user_registered, user_status, display_name
+                            ) VALUES (%s, %s, %s, %s, NOW(), 0, %s)
+                        """
+                        cursor.execute(sql, (
+                            user_login,
+                            default_password,
+                            user_login,  # user_nicename same as user_login
+                            email,
+                            display_name
+                        ))
+                        logging.info(f"Inserted new user {user_login}")
+
+                    inserted_count += 1
+
+                except Exception as e:
+                    errors.append(f"Error insertando usuario {user.get('dni', 'desconocido')}: {str(e)}")
+
+        connection.commit()
+
+    except Exception as e:
+        connection.rollback()
+        errors.append(f"Error en la transacción: {str(e)}")
+    finally:
+        connection.close()
+
+    return inserted_count, errors
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -198,6 +272,12 @@ def process_csv_file(file_path, file_id):
         df_validos = pd.DataFrame(validos)
         df_no_validos = pd.DataFrame(no_validos)
         df_warnings = pd.DataFrame(warnings)
+
+        # Insert valid users into database
+        inserted_count, insert_errors = insert_valid_users_to_db(validos)
+        logging.info(f"Inserted {inserted_count} users into database")
+        if insert_errors:
+            logging.error(f"Database insertion errors: {insert_errors}")
         
         # Generate output files
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -225,6 +305,8 @@ def process_csv_file(file_path, file_id):
             'valid_records': len(df_validos),
             'invalid_records': len(df_no_validos),
             'warning_records': len(df_warnings),
+            'inserted_to_db': inserted_count,
+            'db_insert_errors': insert_errors,
             'valid_file': f"{file_id}_{valid_filename}" if len(df_validos) > 0 else None,
             'invalid_file': f"{file_id}_{invalid_filename}" if len(df_no_validos) > 0 else None,
             'warning_file': f"{file_id}_{warning_filename}" if len(df_warnings) > 0 else None,
