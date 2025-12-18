@@ -105,7 +105,7 @@
                             </div>
                             <div class="card-body">
                                 <p class="card-text">
-                                    <strong>{{ results.valid_records }}</strong> registros con identificadores válidos, emails normalizados y teléfonos limpiados.
+                                    <strong>{{ results.valid_records }}</strong> registros con identificadores válidos, emails normalizados y teléfonos normalizados.
                                 </p>
                                 <a href="{{ url_for('download_file', filename=results.valid_file) }}" 
                                    class="btn btn-success">
@@ -165,6 +165,71 @@
 
 
                 </div>
+
+                <!-- Database Insertion Results -->
+                {% if results.processed_to_db %}
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card border-0 bg-info text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-database-check display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.processed_to_db }}</h3>
+                                <p class="card-text">Procesados en BD</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card border-0 bg-success text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-plus-circle display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.inserted_to_db }}</h3>
+                                <p class="card-text">Nuevos Insertados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card border-0 bg-warning text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-arrow-repeat display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.updated_to_db }}</h3>
+                                <p class="card-text">Actualizados</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% if results.db_insert_errors %}
+                    <div class="col-md-3">
+                        <div class="card border-0 bg-danger text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-database-x display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.db_insert_errors|length }}</h3>
+                                <p class="card-text">Errores</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if results.db_insert_errors %}
+                <div class="card border-0 mb-4">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            Errores de Inserción en Base de Datos
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group">
+                            {% for error in results.db_insert_errors %}
+                            <li class="list-group-item list-group-item-danger">
+                                <i class="bi bi-x-circle me-2"></i>
+                                {{ error }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
 
                 <!-- warning Analysis -->
                 {% if results.warning_reasons %}
