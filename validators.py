@@ -78,18 +78,25 @@ def limpiar_y_elegir_telefono(telefono_str):
     fijos = []
 
     for num in candidatos:
-        solo_digitos = re.sub(r"\D", "", num)
-        if len(solo_digitos) == 9:
-            if solo_digitos.startswith(('6', '7')):
-                moviles.append(solo_digitos)
-            elif solo_digitos.startswith(('8', '9')):
-                fijos.append(solo_digitos)
+        num = num.strip()
+        if not num:
+            continue
+        # Clean digits, handling floats like '606006606.0'
+        try:
+            clean_num = str(int(float(num)))
+        except ValueError:
+            clean_num = re.sub(r"\D", "", num)
+        if len(clean_num) == 9:
+            if clean_num.startswith(('6', '7')):
+                moviles.append(clean_num)
+            elif clean_num.startswith(('8', '9')):
+                fijos.append(clean_num)
     
-    # Prioritize mobile numbers
+    # Prioritize mobile numbers, but accept landline if no mobile
     if moviles:
         return moviles[0]
     elif fijos:
-        return ""  # Return empty for landline as per original logic
+        return fijos[0]  # Accept landline if no mobile
     else:
         return ""
 

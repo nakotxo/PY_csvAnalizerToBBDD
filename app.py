@@ -69,10 +69,69 @@ def test_database_connection():
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
+def insert_user_meta(cursor, user_id, dni, telefono):
+    """Insert or update user meta data in wp_usermeta table"""
+    try:
+        logging.info(f"Inserting meta for user {user_id}, dni {dni}, telefono '{telefono}'")
+        # Define default meta keys and values
+        meta_keys = {
+            'nickname': dni,
+            'dni': dni,
+            'phone': telefono,
+            'old_user': '1',
+            'wp_capabilities': 'a:1:{s:10:"subscriber";b:1;}',
+            'wp_user_level': '0',
+            'show_admin_bar_front': 'false'
+        }
+
+        # Check if user already has meta data by checking 'nickname' meta_key with DNI value
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM wp_usermeta
+            WHERE user_id = %s AND meta_key = 'nickname' AND meta_value = %s
+        """, (user_id, dni))
+        exists = cursor.fetchone()['count'] > 0
+        logging.info(f"User {user_id} exists meta: {exists}")
+
+        if exists:
+            # User has meta data, get existing meta data
+            cursor.execute("SELECT meta_key, meta_value FROM wp_usermeta WHERE user_id = %s", (user_id,))
+            existing_meta = {row['meta_key']: row['meta_value'] for row in cursor.fetchall()}
+            logging.info(f"Existing meta for user {user_id}: {existing_meta}")
+
+            # Update or insert meta keys
+            for key, value in meta_keys.items():
+                if key in existing_meta:
+                    # Update phone if changed
+                    if key == 'phone' and value:
+                        logging.info(f"Sync phone for user {user_id}: '{existing_meta.get(key)}' → '{value}'")
+                        cursor.execute("""
+                            UPDATE wp_usermeta
+                            SET meta_value = %s
+                            WHERE user_id = %s AND meta_key = %s
+                        """, (value, user_id, key))
+                else:
+                    # Insert missing meta keys
+                    logging.info(f"Inserting missing meta {key} = '{value}' for user {user_id}")
+                    cursor.execute("""
+                        INSERT INTO wp_usermeta (user_id, meta_key, meta_value)
+                        VALUES (%s, %s, %s)
+                    """, (user_id, key, value))
+        else:
+            # No meta data exists, insert all meta keys
+            logging.info(f"Inserting all meta for new user {user_id}")
+            for key, value in meta_keys.items():
+                cursor.execute("""
+                    INSERT INTO wp_usermeta (user_id, meta_key, meta_value)
+                    VALUES (%s, %s, %s)
+                """, (user_id, key, value))
+    except Exception as e:
+        logging.error(f"Error in insert_user_meta for user {user_id}: {str(e)}")
+
 def insert_valid_users_to_db(valid_users):
-    """Insert valid users into the wp_users table"""
+    """Insert valid users into the wp_users table and handle wp_usermeta"""
     if not valid_users:
-        return 0, []
+        return 0, 0, 0, 0, []
 
     connection = get_database_connection()
     if not connection:
@@ -110,6 +169,7 @@ def insert_valid_users_to_db(valid_users):
                     existing_user = cursor.fetchone()
 
                     if existing_user:
+                        user_id = existing_user['ID']
                         # Check if data has changed
                         needs_update = (
                             existing_user['user_email'] != email or
@@ -145,8 +205,13 @@ def insert_valid_users_to_db(valid_users):
                             email,
                             display_name
                         ))
+                        user_id = cursor.lastrowid
                         logging.info(f"Inserted new user {user_login} - Rows affected: {result}")
                         inserted_count += 1
+
+                    # Handle user meta data for all processed users
+                    telefono = user.get('telefono', '')
+                    insert_user_meta(cursor, user_id, dni, telefono)
 
                     processed_count += 1
 
@@ -239,8 +304,12 @@ def process_csv_file(file_path, file_id):
 
         # Read CSV file
         df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig')
+        # Normalize column names to lowercase
+        df.columns = df.columns.str.lower()
         logging.info(f"CSV loaded successfully. Total records: {len(df)}")
         logging.info(f"Columns found: {list(df.columns)}")
+        if len(df) > 0:
+            logging.info(f"Sample row: {df.iloc[0].to_dict()}")
         
 
         # Lists for valid and invalid records
@@ -258,7 +327,10 @@ def process_csv_file(file_path, file_id):
             fila['old_user'] = 1
 
             # Clean phone number
-            fila['telefono'] = limpiar_y_elegir_telefono(fila.get('telefono', ''))
+            raw_telefono = fila.get('telefono', '')
+            logging.info(f"Raw telefono for row {idx}: '{raw_telefono}'")
+            fila['telefono'] = limpiar_y_elegir_telefono(raw_telefono)
+            logging.info(f"Cleaned telefono for row {idx}: '{fila['telefono']}'")
             
             # Validate DNI/NIE/CIF
             dni = str(fila.get('dni', '')).strip()
