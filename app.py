@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime
 import pymysql
 from pymysql.cursors import DictCursor
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -20,6 +21,8 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "default_secret_key_for_dev")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+progress = {}
 
 # Configuration
 UPLOAD_FOLDER = 'static/uploads'
