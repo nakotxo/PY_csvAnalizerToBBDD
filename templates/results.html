@@ -209,6 +209,30 @@
                     {% endif %}
                 </div>
 
+                <!-- Meta Operations Results -->
+                {% if results.inserted_meta or results.updated_meta %}
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-primary text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-tags display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.inserted_meta }}</h3>
+                                <p class="card-text">Metadatos Insertados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-secondary text-white">
+                            <div class="card-body text-center">
+                                <i class="bi bi-tags-fill display-4 mb-2"></i>
+                                <h3 class="card-title">{{ results.updated_meta }}</h3>
+                                <p class="card-text">Metadatos Actualizados</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if results.db_insert_errors %}
                 <div class="card border-0 mb-4">
                     <div class="card-header bg-danger text-white">

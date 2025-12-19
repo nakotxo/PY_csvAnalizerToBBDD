@@ -71,6 +71,8 @@ def test_database_connection():
 
 def insert_user_meta(cursor, user_id, dni, telefono):
     """Insert or update user meta data in wp_usermeta table"""
+    inserted_meta = 0
+    updated_meta = 0
     try:
         logging.info(f"Inserting meta for user {user_id}, dni {dni}, telefono '{telefono}'")
         # Define default meta keys and values
@@ -110,6 +112,7 @@ def insert_user_meta(cursor, user_id, dni, telefono):
                             SET meta_value = %s
                             WHERE user_id = %s AND meta_key = %s
                         """, (value, user_id, key))
+                        updated_meta += 1
                 else:
                     # Insert missing meta keys
                     logging.info(f"Inserting missing meta {key} = '{value}' for user {user_id}")
@@ -117,6 +120,7 @@ def insert_user_meta(cursor, user_id, dni, telefono):
                         INSERT INTO wp_usermeta (user_id, meta_key, meta_value)
                         VALUES (%s, %s, %s)
                     """, (user_id, key, value))
+                    inserted_meta += 1
         else:
             # No meta data exists, insert all meta keys
             logging.info(f"Inserting all meta for new user {user_id}")
@@ -125,22 +129,26 @@ def insert_user_meta(cursor, user_id, dni, telefono):
                     INSERT INTO wp_usermeta (user_id, meta_key, meta_value)
                     VALUES (%s, %s, %s)
                 """, (user_id, key, value))
+                inserted_meta += len(meta_keys)
     except Exception as e:
         logging.error(f"Error in insert_user_meta for user {user_id}: {str(e)}")
+    return inserted_meta, updated_meta
 
 def insert_valid_users_to_db(valid_users):
     """Insert valid users into the wp_users table and handle wp_usermeta"""
     if not valid_users:
-        return 0, 0, 0, 0, []
+        return 0, 0, 0, 0, 0, 0, []
 
     connection = get_database_connection()
     if not connection:
-        return 0, ["Error: No se pudo conectar a la base de datos"]
+        return 0, 0, 0, 0, 0, 0, ["Error: No se pudo conectar a la base de datos"]
 
     processed_count = 0
     inserted_count = 0
     updated_count = 0
     skipped_count = 0
+    inserted_meta_total = 0
+    updated_meta_total = 0
     errors = []
 
     try:
@@ -211,7 +219,9 @@ def insert_valid_users_to_db(valid_users):
 
                     # Handle user meta data for all processed users
                     telefono = user.get('telefono', '')
-                    insert_user_meta(cursor, user_id, dni, telefono)
+                    inserted_meta, updated_meta = insert_user_meta(cursor, user_id, dni, telefono)
+                    inserted_meta_total += inserted_meta
+                    updated_meta_total += updated_meta
 
                     processed_count += 1
 
@@ -232,7 +242,7 @@ def insert_valid_users_to_db(valid_users):
         connection.close()
         logging.info("Database connection closed")
 
-    return processed_count, inserted_count, updated_count, skipped_count, errors
+    return processed_count, inserted_count, updated_count, skipped_count, inserted_meta_total, updated_meta_total, errors
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -375,8 +385,9 @@ def process_csv_file(file_path, file_id):
         df_warnings = pd.DataFrame(warnings)
 
         # Insert valid users into database
-        processed_count, inserted_count, updated_count, skipped_count, insert_errors = insert_valid_users_to_db(validos)
+        processed_count, inserted_count, updated_count, skipped_count, inserted_meta, updated_meta, insert_errors = insert_valid_users_to_db(validos)
         logging.info(f"Processed {processed_count} users into database (inserted: {inserted_count}, updated: {updated_count}, skipped: {skipped_count})")
+        logging.info(f"Meta operations: inserted {inserted_meta}, updated {updated_meta}")
         if insert_errors:
             logging.error(f"Database insertion errors: {insert_errors}")
         
@@ -410,6 +421,8 @@ def process_csv_file(file_path, file_id):
             'inserted_to_db': inserted_count,
             'updated_to_db': updated_count,
             'skipped_to_db': skipped_count,
+            'inserted_meta': inserted_meta,
+            'updated_meta': updated_meta,
             'db_insert_errors': insert_errors,
             'valid_file': f"{file_id}_{valid_filename}" if len(df_validos) > 0 else None,
             'invalid_file': f"{file_id}_{invalid_filename}" if len(df_no_validos) > 0 else None,
